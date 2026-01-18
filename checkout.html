@@ -6,6 +6,9 @@
     <title>Checkout - TradeSync Pro</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- ✅ reCAPTCHA v3 - Replace YOUR_SITE_KEY with your actual key -->
+    <script src="https://www.google.com/recaptcha/api.js?render=6LeJ0k4sAAAAAHbxCseOvn6FAmCDhAuw_X_UEkQC"></script>
 </head>
 <body>
     <div class="container">
@@ -39,17 +42,26 @@
                 <div class="checkout-form">
                     <h2>Enter Your Details</h2>
                     <form id="checkoutForm">
+                        <!-- ✅ HONEYPOT: Hidden field to catch bots -->
+                        <div style="position: absolute; left: -9999px; opacity: 0; pointer-events: none;" aria-hidden="true">
+                            <label for="website">Website (leave blank):</label>
+                            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+                        </div>
+                        
                         <div class="form-group">
                             <label for="userName">Full Name *</label>
                             <input type="text" id="userName" name="userName" required
-                                   placeholder="Enter your full name" minlength="2">
+                                   placeholder="Enter your full name" minlength="2" maxlength="100">
                         </div>
+                        
                         <div class="form-group">
                             <label for="userEmail">Email Address *</label>
                             <input type="email" id="userEmail" name="userEmail" required
                                    placeholder="your@email.com">
                             <small>Your activation key will be sent to this email</small>
+                            <div id="emailError" class="error-message" style="display: none; color: #e74c3c; margin-top: 5px; font-size: 0.9em;"></div>
                         </div>
+                        
                         <div class="form-group">
                             <label>Payment Network *</label>
                             <div class="network-options">
@@ -61,7 +73,7 @@
                                     </span>
                                 </label>
                                 <!--BEP20 DISABLED - BSCScan API requires paid subscription
-                                    <label class="network-option">
+                                <label class="network-option">
                                     <input type="radio" name="network" value="BEP20">
                                     <span class="network-label">
                                         <strong>🟡 BEP20 (BSC)</strong>
@@ -84,18 +96,51 @@
 
                 <div class="loading-overlay" id="loadingOverlay" style="display: none;">
                     <div class="spinner"></div>
-                    <p>Creating your order...</p>
+                    <p id="loadingMessage">Creating your order...</p>
                 </div>
             </div>
         </main>
 
         <footer class="footer">
             <p>🔒 Direct USDT payment - No third-party fees</p>
+            <p class="footer-security">🛡️ Protected by Google reCAPTCHA</p>
         </footer>
     </div>
 
     <script src="js/app.js"></script>
     <script>
+        // ✅ BLOCKED EMAIL DOMAINS (Disposable/Spam emails)
+        const BLOCKED_DOMAINS = [
+            'wirethings.net',
+            'irethings.net',
+            'ourtimesupport.com',
+            'mailinator.com',
+            'tempmail.com',
+            'guerrillamail.com',
+            '10minutemail.com',
+            'throwaway.email',
+            'temp-mail.org',
+            'yopmail.com',
+            'fakeinbox.com',
+            'trashmail.com',
+            'maildrop.cc',
+            'getnada.com',
+            'sharklasers.com',
+            'grr.la',
+            'guerrillamailblock.com',
+            'pokemail.net',
+            'spam4.me',
+            'tempinbox.com',
+            'dispostable.com',
+            'mintemail.com',
+            'mytemp.email',
+            'emailondeck.com'
+        ];
+
+        // ✅ Track form interaction
+        let formInteractionStarted = false;
+        let formInteractionTime = 0;
+        
         document.addEventListener('DOMContentLoaded', () => {
             const planData = sessionStorage.getItem('selectedPlan');
             if (!planData) {
@@ -114,28 +159,133 @@
                     option.classList.add('selected');
                 });
             });
+            
+            // ✅ Track when user starts interacting with form
+            const formInputs = document.querySelectorAll('#checkoutForm input');
+            formInputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    if (!formInteractionStarted) {
+                        formInteractionStarted = true;
+                        formInteractionTime = Date.now();
+                    }
+                }, { once: true });
+            });
+            
+            // ✅ Real-time email validation
+            const emailInput = document.getElementById('userEmail');
+            const emailError = document.getElementById('emailError');
+            
+            emailInput.addEventListener('blur', () => {
+                const email = emailInput.value.trim().toLowerCase();
+                if (email) {
+                    const domain = email.split('@')[1];
+                    if (domain && BLOCKED_DOMAINS.includes(domain)) {
+                        emailError.textContent = '⚠️ Please use a valid, permanent email address';
+                        emailError.style.display = 'block';
+                        emailInput.style.borderColor = '#e74c3c';
+                    } else {
+                        emailError.style.display = 'none';
+                        emailInput.style.borderColor = '';
+                    }
+                }
+            });
         });
 
         document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            // ✅ HONEYPOT CHECK: If filled, it's a bot
+            const honeypot = document.getElementById('website').value;
+            if (honeypot) {
+                console.warn('🚫 Bot detected: Honeypot filled');
+                // Silently fail for bot
+                document.getElementById('loadingOverlay').style.display = 'flex';
+                document.getElementById('loadingMessage').textContent = 'Processing...';
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                alert('An error occurred. Please try again later.');
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+
             const plan = JSON.parse(sessionStorage.getItem('selectedPlan'));
             const userName = document.getElementById('userName').value.trim();
-            const userEmail = document.getElementById('userEmail').value.trim();
+            const userEmail = document.getElementById('userEmail').value.trim().toLowerCase();
             const network = document.querySelector('input[name="network"]:checked').value;
 
+            // ✅ VALIDATE EMAIL DOMAIN (Client-side check)
+            const emailDomain = userEmail.split('@')[1];
+            if (emailDomain && BLOCKED_DOMAINS.includes(emailDomain)) {
+                const emailError = document.getElementById('emailError');
+                emailError.textContent = '❌ Disposable email addresses are not allowed. Please use a permanent email.';
+                emailError.style.display = 'block';
+                document.getElementById('userEmail').focus();
+                return;
+            }
+
+            // ✅ VALIDATE NAME (Basic spam check)
+            if (userName.length < 2 || userName.length > 100) {
+                alert('Please enter a valid name (2-100 characters)');
+                return;
+            }
+            
+            // Check for suspicious patterns in name
+            const suspiciousPatterns = /^[a-z]+\d+@|^test|^fake|^spam|^\d+$/i;
+            if (suspiciousPatterns.test(userName)) {
+                console.warn('⚠️ Suspicious name pattern:', userName);
+            }
+
+            // ✅ BOT DETECTION: Check form interaction time
+            let timeToSubmit = 0;
+            if (formInteractionStarted) {
+                timeToSubmit = Date.now() - formInteractionTime;
+            }
+            
+            // If form submitted in less than 3 seconds, suspicious
+            if (timeToSubmit > 0 && timeToSubmit < 3000) {
+                console.warn('⚠️ Form submitted too quickly:', timeToSubmit, 'ms');
+            }
+
             document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('loadingMessage').textContent = 'Creating your order...';
             document.getElementById('proceedBtn').disabled = true;
 
             try {
+                // ✅ GENERATE RECAPTCHA TOKEN
+                let captchaToken = sessionStorage.getItem('captchaToken'); // From previous page
+                
+                // Generate new token for this action
+                if (typeof grecaptcha !== 'undefined') {
+                    try {
+                        captchaToken = await grecaptcha.execute('YOUR_SITE_KEY', {action: 'create_order'});
+                        console.log('✅ reCAPTCHA token generated');
+                    } catch (error) {
+                        console.warn('⚠️ reCAPTCHA generation failed:', error);
+                        // Continue without token (backend will log warning)
+                    }
+                }
+
+                // ✅ SEND REQUEST WITH CAPTCHA TOKEN
                 const response = await PaymentAPI.createOrder({
                     userName,
                     userEmail,
                     subscriptionDays: plan.days,
-                    network
+                    network,
+                    captchaToken: captchaToken || undefined,  // ✅ Include CAPTCHA token
+                    // ✅ Include behavioral data for backend analysis
+                    metadata: {
+                        timeToSubmit: timeToSubmit,
+                        fastClick: sessionStorage.getItem('fastClick') === 'true',
+                        suspiciousClicks: sessionStorage.getItem('suspiciousClicks') === 'true',
+                        timeOnPreviousPage: plan.timeOnPage || 0
+                    }
                 });
 
                 if (response.success) {
+                    // Clear flags
+                    sessionStorage.removeItem('captchaToken');
+                    sessionStorage.removeItem('fastClick');
+                    sessionStorage.removeItem('suspiciousClicks');
+                    
                     sessionStorage.setItem('currentOrder', JSON.stringify({
                         orderId: response.orderId,
                         amount: response.amount,
@@ -150,10 +300,38 @@
                     throw new Error(response.message || 'Failed to create order');
                 }
             } catch (error) {
+                console.error('Order creation error:', error);
+                
                 document.getElementById('loadingOverlay').style.display = 'none';
                 document.getElementById('proceedBtn').disabled = false;
-                alert('Error: ' + error.message);
+                
+                // ✅ USER-FRIENDLY ERROR MESSAGES
+                let errorMessage = error.message;
+                
+                if (errorMessage.includes('CAPTCHA')) {
+                    errorMessage = 'Security verification failed. Please try again.';
+                } else if (errorMessage.includes('email')) {
+                    errorMessage = 'Invalid email address. Please use a valid email.';
+                } else if (errorMessage.includes('rate limit')) {
+                    errorMessage = 'Too many requests. Please wait a few minutes and try again.';
+                } else if (errorMessage.includes('network') || errorMessage.includes('timeout')) {
+                    errorMessage = 'Network error. Please check your connection and try again.';
+                }
+                
+                alert('⚠️ Error: ' + errorMessage);
             }
+        });
+        
+        // ✅ PREVENT FORM RESUBMISSION
+        let isSubmitting = false;
+        const originalFormSubmit = document.getElementById('checkoutForm').onsubmit;
+        document.getElementById('checkoutForm').addEventListener('submit', (e) => {
+            if (isSubmitting) {
+                e.preventDefault();
+                console.warn('⚠️ Form already submitting...');
+                return false;
+            }
+            isSubmitting = true;
         });
     </script>
 </body>
