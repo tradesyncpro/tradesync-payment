@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- ✅ reCAPTCHA v3 - Replace YOUR_SITE_KEY with your actual key -->
+    <!-- Get key from: https://www.google.com/recaptcha/admin/create -->
+    <script src="https://www.google.com/recaptcha/api.js?render=6LeJ0k4sAAAAAHbxCseOvn6FAmCDhAuw_X_UEkQC"></script>
 </head>
 <body>
     <div class="container">
@@ -48,21 +52,33 @@
         <footer class="footer">
             <p>🔒 Direct USDT Payment - No Third-Party Fees</p>
             <p class="footer-note">Pay with USDT (TRC20) • Activation key will be sent to your email</p>
+            <!-- ✅ Add security badge -->
+            <p class="footer-security">🛡️ Protected by Google reCAPTCHA</p>
         </footer>
     </div>
 
     <script src="js/app.js"></script>
     <script>
+        // ✅ Bot detection: Track suspicious behavior
+        let clickCount = 0;
+        const clickTimestamps = [];
+        
         document.addEventListener('DOMContentLoaded', async () => {
             try {
+                // ✅ Load payment info from API
                 const info = await PaymentAPI.getPaymentInfo();
                 renderPlans(info.plans);
+                
+                // ✅ Track page load time (bots load instantly)
+                window.pageLoadTime = Date.now();
             } catch (error) {
+                console.error('Failed to load plans:', error);
                 document.getElementById('plansContainer').innerHTML = `
-                        <div class="error-message">
-                            <p>❌ Failed to load plans. Please refresh the page.</p>
-                        </div>
-                    `;
+                    <div class="error-message">
+                        <p>❌ Failed to load plans. Please refresh the page.</p>
+                        <button onclick="location.reload()" class="btn btn-primary">Retry</button>
+                    </div>
+                `;
             }
         });
 
@@ -72,34 +88,91 @@
             const plansHTML = plans.map((plan) => {
                 const isPopular = plan.days === 30;
                 return `
-                        <div class="plan-card ${isPopular ? 'popular' : ''}" onclick="selectPlan(${plan.days}, ${plan.price})">
-                            ${isPopular ? '<div class="popular-badge">Most Popular</div>' : ''}
-                            <div class="plan-duration">${plan.days} Days</div>
-                            <div class="plan-price">
-                                <span class="currency">$</span>
-                                <span class="amount">${plan.price}</span>
-                                <span class="unit">USDT</span>
-                            </div>
-                            <div class="plan-perday">$${(plan.price / plan.days).toFixed(2)}/day</div>
-                            <ul class="plan-features">
-                                <li>✓ Full Software Access</li>
-                                <li>✓ Unlimited Trade Copying</li>
-                                <li>✓ Email Support</li>
-                                ${plan.days >= 20 ? '<li>✓ Priority Support</li>' : ''}
-                                ${plan.days >= 30 ? '<li>✓ Best Value</li>' : ''}
-                            </ul>
-                            <button class="btn btn-primary">Select Plan</button>
+                    <div class="plan-card ${isPopular ? 'popular' : ''}" onclick="selectPlan(${plan.days}, ${plan.price})">
+                        ${isPopular ? '<div class="popular-badge">Most Popular</div>' : ''}
+                        <div class="plan-duration">${plan.days} Days</div>
+                        <div class="plan-price">
+                            <span class="currency">$</span>
+                            <span class="amount">${plan.price}</span>
+                            <span class="unit">USDT</span>
                         </div>
-                    `;
+                        <div class="plan-perday">$${(plan.price / plan.days).toFixed(2)}/day</div>
+                        <ul class="plan-features">
+                            <li>✓ Full Software Access</li>
+                            <li>✓ Unlimited Trade Copying</li>
+                            <li>✓ Email Support</li>
+                            ${plan.days >= 20 ? '<li>✓ Priority Support</li>' : ''}
+                            ${plan.days >= 30 ? '<li>✓ Best Value</li>' : ''}
+                        </ul>
+                        <button class="btn btn-primary">Select Plan</button>
+                    </div>
+                `;
             }).join('');
 
             container.innerHTML = plansHTML;
         }
 
-        function selectPlan(days, price) {
-            sessionStorage.setItem('selectedPlan', JSON.stringify({ days, price }));
+        async function selectPlan(days, price) {
+            // ✅ Bot detection: Check if page just loaded (bots click instantly)
+            const timeOnPage = Date.now() - (window.pageLoadTime || Date.now());
+            if (timeOnPage < 1000) {
+                console.warn('⚠️ Suspiciously fast click detected');
+                // Still allow, but flag for later
+                sessionStorage.setItem('fastClick', 'true');
+            }
+            
+            // ✅ Bot detection: Track click patterns
+            clickCount++;
+            clickTimestamps.push(Date.now());
+            
+            // If more than 3 clicks in 2 seconds, might be bot
+            const recentClicks = clickTimestamps.filter(t => Date.now() - t < 2000);
+            if (recentClicks.length > 3) {
+                console.warn('⚠️ Suspicious clicking pattern detected');
+                sessionStorage.setItem('suspiciousClicks', 'true');
+            }
+            
+            // ✅ Store selected plan
+            sessionStorage.setItem('selectedPlan', JSON.stringify({ 
+                days, 
+                price,
+                selectedAt: Date.now(),
+                timeOnPage: timeOnPage
+            }));
+            
+            // ✅ Generate reCAPTCHA token for next page
+            // Note: Replace YOUR_SITE_KEY with your actual site key
+            try {
+                if (typeof grecaptcha !== 'undefined') {
+                    const token = await grecaptcha.execute('6LeJ0k4sAAAAAHbxCseOvn6FAmCDhAuw_X_UEkQC', {action: 'select_plan'});
+                    sessionStorage.setItem('captchaToken', token);
+                    console.log('✅ reCAPTCHA token generated');
+                }
+            } catch (error) {
+                console.warn('⚠️ reCAPTCHA not available:', error);
+                // Still allow user to proceed
+            }
+            
+            // Redirect to checkout
             window.location.href = 'checkout.html';
         }
+        
+        // ✅ Prevent rapid-fire clicking (bot behavior)
+        let isSelecting = false;
+        const originalSelectPlan = selectPlan;
+        selectPlan = async function(days, price) {
+            if (isSelecting) {
+                console.warn('⚠️ Please wait...');
+                return;
+            }
+            
+            isSelecting = true;
+            try {
+                await originalSelectPlan(days, price);
+            } finally {
+                setTimeout(() => { isSelecting = false; }, 500);
+            }
+        };
     </script>
 </body>
 </html>
