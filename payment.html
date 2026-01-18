@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Payment - TradeSync Pro</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>TradeSync Pro</h1>
+            </div>
+        </header>
+
+        <div class="progress-bar">
+            <div class="step completed"><div class="step-number">✓</div><span>Select Plan</span></div>
+            <div class="step completed"><div class="step-number">✓</div><span>Your Details</span></div>
+            <div class="step active"><div class="step-number">3</div><span>Payment</span></div>
+        </div>
+
+        <main class="main-content">
+            <div class="payment-container">
+                <div class="timer-box">
+                    <span class="timer-icon">⏰</span>
+                    <span>Order expires in: </span>
+                    <span id="countdown" class="countdown">60:00</span>
+                </div>
+
+                <div class="order-info-box">
+                    <div class="order-id">Order ID: <strong id="orderId">-</strong></div>
+                </div>
+
+                <div class="payment-section">
+                    <h2 class="section-title">Send USDT Payment</h2>
+
+                    <div class="amount-display">
+                        <span class="amount-label">Send exactly:</span>
+                        <div class="amount-value">
+                            <span id="paymentAmount">-</span>
+                            <span class="amount-currency">USDT</span>
+                        </div>
+                        <button class="copy-btn" onclick="copyAmount()">📋 Copy</button>
+                    </div>
+
+                    <div class="network-badge" id="networkBadge">
+                        <span class="badge trc20">TRC20</span>
+                    </div>
+
+                    <div class="qr-container">
+                        <img id="qrCodeImage" alt="QR Code" style="width: 200px; height: 200px;">
+                        <p class="qr-hint">Scan with your wallet app</p>
+                    </div>
+
+                    <div class="wallet-address-box">
+                        <label>Wallet Address (<span id="networkLabel">TRC20</span>):</label>
+                        <div class="address-container">
+                            <code id="walletAddress">-</code>
+                            <button class="copy-btn" onclick="copyAddress()">📋 Copy</button>
+                        </div>
+                    </div>
+
+                    <div class="warning-box">
+                        <h4>⚠️ Important:</h4>
+                        <ul>
+                            <li>Send <strong>exactly</strong> <span id="exactAmount">-</span> USDT</li>
+                            <li>Use only <strong id="networkWarning">USDT-TRC20</strong> network</li>
+                            <li>Payment is auto-detected within 1-2 minutes</li>
+                            <li>Your activation key will be emailed after confirmation</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="status-section">
+                    <div id="statusMessage" class="status-pending">
+                        <span class="status-icon">⏳</span>
+                        <span>Waiting for payment...</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="checkPayment()" id="checkBtn">
+                        🔍 Check Payment Status
+                    </button>
+                </div>
+
+                <div class="support-box">
+                    <p>Save your Order ID: <strong id="orderIdCopy">-</strong></p>
+                    <p>Contact: <a href="mailto:tradesyncpro@outlook.com">tradesyncpro@outlook.com</a></p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        const orderData = sessionStorage.getItem('currentOrder');
+        if (!orderData) {
+            alert('No order found. Redirecting to home page.');
+            window.location.href = 'index.html';
+        }
+
+        const order = JSON.parse(orderData);
+        const orderId = order.orderId;
+        const amount = order.amount;
+        const walletAddress = order.walletAddress;
+        const network = order.network || 'TRC20';
+        const expiresAt = order.expiresAt;
+
+        // Display order details
+        document.getElementById('orderId').textContent = orderId;
+        document.getElementById('orderIdCopy').textContent = orderId;
+        document.getElementById('paymentAmount').textContent = amount;
+        document.getElementById('exactAmount').textContent = amount;
+        document.getElementById('walletAddress').textContent = walletAddress;
+        document.getElementById('networkLabel').textContent = network;
+        document.getElementById('networkWarning').textContent = `USDT-${network}`;
+        document.getElementById('networkBadge').innerHTML = `<span class="badge ${network.toLowerCase()}">${network}</span>`;
+
+        // Generate QR Code
+        generateQRCode('qrCodeImage', walletAddress, 200);
+
+        // Countdown timer
+        let expiresAtDate = expiresAt ? new Date(expiresAt) : new Date(Date.now() + 60 * 60 * 1000);
+
+        function updateCountdown() {
+            const now = new Date();
+            const diff = expiresAtDate - now;
+
+            if (diff <= 0) {
+                document.getElementById('countdown').textContent = 'EXPIRED';
+                document.getElementById('countdown').classList.add('expired');
+                document.getElementById('statusMessage').innerHTML = `
+                        <span class="status-icon">❌</span>
+                        <span>Order expired. Please create a new order.</span>
+                    `;
+                document.getElementById('statusMessage').className = 'status-expired';
+                return;
+            }
+
+            const minutes = Math.floor(diff / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            document.getElementById('countdown').textContent =
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            if (minutes < 5) {
+                document.getElementById('countdown').classList.add('warning');
+            }
+        }
+
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
+        // Auto-check payment every 30 seconds
+        setInterval(checkPayment, 30000);
+
+        function copyAmount() {
+            copyToClipboard(amount.toString(), 'Amount copied!');
+        }
+
+        function copyAddress() {
+            copyToClipboard(walletAddress, 'Address copied!');
+        }
+
+        async function checkPayment() {
+            const btn = document.getElementById('checkBtn');
+            btn.disabled = true;
+            btn.textContent = '🔄 Checking...';
+
+            try {
+                // First try to verify payment on blockchain
+                const verifyResult = await PaymentAPI.verifyPayment(orderId);
+
+                if (verifyResult.found) {
+                    document.getElementById('statusMessage').innerHTML = `
+                            <span class="status-icon">✅</span>
+                            <span>Payment confirmed! Check your email for the activation key.</span>
+                        `;
+                    document.getElementById('statusMessage').className = 'status-confirmed';
+
+                    sessionStorage.setItem('orderConfirmed', 'true');
+                    setTimeout(() => {
+                        window.location.href = `status.html?orderId=${orderId}`;
+                    }, 2000);
+                    return;
+                }
+
+                // Check order status
+                const status = await PaymentAPI.checkOrder(orderId);
+
+                if (status.status === 'confirmed') {
+                    document.getElementById('statusMessage').innerHTML = `
+                            <span class="status-icon">✅</span>
+                            <span>Payment confirmed! Check your email.</span>
+                        `;
+                    document.getElementById('statusMessage').className = 'status-confirmed';
+                    setTimeout(() => {
+                        window.location.href = `status.html?orderId=${orderId}`;
+                    }, 2000);
+                } else if (status.status === 'expired') {
+                    document.getElementById('statusMessage').innerHTML = `
+                            <span class="status-icon">❌</span>
+                            <span>Order expired. Please create a new order.</span>
+                        `;
+                    document.getElementById('statusMessage').className = 'status-expired';
+                } else {
+                    showToast('Still waiting for payment...');
+                }
+            } catch (error) {
+                console.error('Check failed:', error);
+                showToast('Could not check status. Try again.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🔍 Check Payment Status';
+            }
+        }
+    </script>
+</body>
+</html>

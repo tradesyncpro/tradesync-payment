@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Checkout - TradeSync Pro</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>TradeSync Pro</h1>
+            </div>
+        </header>
+
+        <div class="progress-bar">
+            <div class="step completed"><div class="step-number">✓</div><span>Select Plan</span></div>
+            <div class="step active"><div class="step-number">2</div><span>Your Details</span></div>
+            <div class="step"><div class="step-number">3</div><span>Payment</span></div>
+        </div>
+
+        <main class="main-content">
+            <div class="checkout-container">
+                <div class="order-summary">
+                    <h3>Order Summary</h3>
+                    <div class="summary-item">
+                        <span>Plan:</span>
+                        <span id="planDays">-</span>
+                    </div>
+                    <div class="summary-item total">
+                        <span>Total:</span>
+                        <span id="planPrice">$- USDT</span>
+                    </div>
+                </div>
+
+                <div class="checkout-form">
+                    <h2>Enter Your Details</h2>
+                    <form id="checkoutForm">
+                        <div class="form-group">
+                            <label for="userName">Full Name *</label>
+                            <input type="text" id="userName" name="userName" required
+                                   placeholder="Enter your full name" minlength="2">
+                        </div>
+                        <div class="form-group">
+                            <label for="userEmail">Email Address *</label>
+                            <input type="email" id="userEmail" name="userEmail" required
+                                   placeholder="your@email.com">
+                            <small>Your activation key will be sent to this email</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Network *</label>
+                            <div class="network-options">
+                                <label class="network-option selected">
+                                    <input type="radio" name="network" value="TRC20" checked>
+                                    <span class="network-label">
+                                        <strong>🔷 TRC20 (Tron)</strong>
+                                        <small>Lower fees (~$0.15)</small>
+                                    </span>
+                                </label>
+                                <!--BEP20 DISABLED - BSCScan API requires paid subscription
+                                    <label class="network-option">
+                                    <input type="radio" name="network" value="BEP20">
+                                    <span class="network-label">
+                                        <strong>🟡 BEP20 (BSC)</strong>
+                                        <small>Fast (~$0.30 fee)</small>
+                                    </span>
+                                </label>
+                                -->
+                            </div>
+                            <small class="network-note">💡 TRC20 offers the lowest transaction fees</small>
+                        </div>
+
+                        <div class="form-actions">
+                            <a href="index.html" class="btn btn-secondary">← Back</a>
+                            <button type="submit" class="btn btn-primary" id="proceedBtn">
+                                Proceed to Payment →
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Creating your order...</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>🔒 Direct USDT payment - No third-party fees</p>
+        </footer>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const planData = sessionStorage.getItem('selectedPlan');
+            if (!planData) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            const plan = JSON.parse(planData);
+            document.getElementById('planDays').textContent = `${plan.days} Days License`;
+            document.getElementById('planPrice').textContent = `$${plan.price} USDT`;
+
+            // Network selection highlight
+            document.querySelectorAll('.network-option').forEach(option => {
+                option.addEventListener('click', () => {
+                    document.querySelectorAll('.network-option').forEach(o => o.classList.remove('selected'));
+                    option.classList.add('selected');
+                });
+            });
+        });
+
+        document.getElementById('checkoutForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const plan = JSON.parse(sessionStorage.getItem('selectedPlan'));
+            const userName = document.getElementById('userName').value.trim();
+            const userEmail = document.getElementById('userEmail').value.trim();
+            const network = document.querySelector('input[name="network"]:checked').value;
+
+            document.getElementById('loadingOverlay').style.display = 'flex';
+            document.getElementById('proceedBtn').disabled = true;
+
+            try {
+                const response = await PaymentAPI.createOrder({
+                    userName,
+                    userEmail,
+                    subscriptionDays: plan.days,
+                    network
+                });
+
+                if (response.success) {
+                    sessionStorage.setItem('currentOrder', JSON.stringify({
+                        orderId: response.orderId,
+                        amount: response.amount,
+                        walletAddress: response.walletAddress,
+                        network: response.network,
+                        expiresAt: response.expiresAt,
+                        email: userEmail
+                    }));
+
+                    window.location.href = 'payment.html';
+                } else {
+                    throw new Error(response.message || 'Failed to create order');
+                }
+            } catch (error) {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('proceedBtn').disabled = false;
+                alert('Error: ' + error.message);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Status - TradeSync Pro</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <span class="logo-icon">📈</span>
+                <h1>TradeSync Pro</h1>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="status-container" id="statusContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Checking payment status...</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>Need help? Contact <a href="mailto:tradesyncpro@outlook.com">tradesyncpro@outlook.com</a></p>
+        </footer>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>
+        let checkInterval;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            let orderId = urlParams.get('orderId');
+
+            if (!orderId) {
+                const orderData = sessionStorage.getItem('currentOrder');
+                if (orderData) {
+                    orderId = JSON.parse(orderData).orderId;
+                }
+            }
+
+            if (!orderId) {
+                showError('No order found. Please start a new purchase.');
+                return;
+            }
+
+            checkStatus(orderId);
+            checkInterval = setInterval(() => checkStatus(orderId), 5000);
+        });
+
+        async function checkStatus(orderId) {
+            try {
+                const response = await PaymentAPI.checkOrder(orderId);
+
+                if (!response.found) {
+                    showError('Order not found.');
+                    clearInterval(checkInterval);
+                    return;
+                }
+
+                renderStatus(response);
+
+                if (['confirmed', 'expired', 'cancelled', 'failed'].includes(response.status)) {
+                    clearInterval(checkInterval);
+                }
+            } catch (error) {
+                console.error('Status check error:', error);
+            }
+        }
+
+        function renderStatus(order) {
+            const container = document.getElementById('statusContainer');
+
+            let statusIcon, statusTitle, statusMessage, statusClass;
+
+            switch (order.status) {
+                case 'confirmed':
+                    statusIcon = '✅';
+                    statusTitle = 'Payment Confirmed!';
+                    statusMessage = `Your activation key has been sent to your email.<br><strong>Check your inbox (and spam folder).</strong>`;
+                    statusClass = 'status-success';
+                    break;
+                case 'confirming':
+                    statusIcon = '⏳';
+                    statusTitle = 'Payment Detected';
+                    statusMessage = 'Your payment is being confirmed on the blockchain. This usually takes 1-3 minutes.';
+                    statusClass = 'status-pending';
+                    break;
+                case 'pending':
+                    statusIcon = '💳';
+                    statusTitle = 'Waiting for Payment';
+                    statusMessage = 'Send the exact USDT amount to the wallet address.<br>This page will update automatically.';
+                    statusClass = 'status-pending';
+                    break;
+                case 'expired':
+                    statusIcon = '⏰';
+                    statusTitle = 'Order Expired';
+                    statusMessage = 'This order has expired. Please create a new order.';
+                    statusClass = 'status-expired';
+                    break;
+                case 'failed':
+                    statusIcon = '❌';
+                    statusTitle = 'Payment Failed';
+                    statusMessage = 'There was an issue with your payment. Please try again.';
+                    statusClass = 'status-error';
+                    break;
+                default:
+                    statusIcon = '📋';
+                    statusTitle = 'Processing';
+                    statusMessage = 'Your order is being processed...';
+                    statusClass = 'status-pending';
+            }
+
+            container.innerHTML = `
+                    <div class="status-card ${statusClass}">
+                        <div class="status-icon-large">${statusIcon}</div>
+                        <h2>${statusTitle}</h2>
+                        <p class="status-message">${statusMessage}</p>
+
+                        <div class="order-details">
+                            <div class="detail-row">
+                                <span>Order ID:</span>
+                                <strong>${order.orderId}</strong>
+                            </div>
+                            <div class="detail-row">
+                                <span>Plan:</span>
+                                <strong>${order.subscriptionDays} Days</strong>
+                            </div>
+                            <div class="detail-row">
+                                <span>Amount:</span>
+                                <strong>$${order.amount} USDT</strong>
+                            </div>
+                        </div>
+
+                        ${order.status === 'confirmed' ? `
+                            <div class="success-actions">
+                                <p>🎉 Thank you for your purchase!</p>
+                                <a href="index.html" class="btn btn-secondary">← Back to Home</a>
+                            </div>
+                        ` : ''}
+
+                        ${['expired', 'failed', 'cancelled'].includes(order.status) ? `
+                            <div class="error-actions">
+                                <a href="index.html" class="btn btn-primary">Try Again</a>
+                            </div>
+                        ` : ''}
+
+                        ${order.status === 'pending' ? `
+                            <div class="pending-note">
+                                <p>⏳ This page refreshes automatically every 5 seconds</p>
+                                <a href="payment.html" class="btn btn-secondary">← Back to Payment</a>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+        }
+
+        function showError(message) {
+            document.getElementById('statusContainer').innerHTML = `
+                    <div class="status-card status-error">
+                        <div class="status-icon-large">❌</div>
+                        <h2>Error</h2>
+                        <p>${message}</p>
+                        <a href="index.html" class="btn btn-primary">Start New Purchase</a>
+                    </div>
+                `;
+        }
+    </script>
+</body>
+</html>
