@@ -256,7 +256,7 @@
                 // Generate new token for this action
                 if (typeof grecaptcha !== 'undefined') {
                     try {
-                        captchaToken = await grecaptcha.execute('YOUR_SITE_KEY', {action: 'create_order'});
+                        captchaToken = await grecaptcha.execute('6LeJ0k4sAAAAAHbxCseOvn6FAmCDhAuw_X_UEkQC', {action: 'create_order'});
                         console.log('✅ reCAPTCHA token generated');
                     } catch (error) {
                         console.warn('⚠️ reCAPTCHA generation failed:', error);
